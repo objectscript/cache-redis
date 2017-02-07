@@ -1,0 +1,10 @@
+- objects script
+- iKnow - softwere to make unstructred data in database structred
+- sharding - when I have very large query to process on one computer, that ocmputer will break this query
+ to several queries that this machine send as request to process to other computers/machines
+- SOAP - like JSON but in xml
+- SOA, ESB
+- Ensemble
+ Firma C-systems
+- zwrite - popis objektu DB
+..ObjReference

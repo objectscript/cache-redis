@@ -1,0 +1,983 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Export generator="Cache" version="25" zv="Cache for Windows (x86-64) 2016.2.1 (Build 803U)" ts="2017-02-03 15:38:42">
+<Class name="REDIS.FunctionsHandling.FunctionPrescribtion">
+<Description>
+This class is Interface for other functions in FunctionsScope</Description>
+<Abstract>1</Abstract>
+<TimeChanged>64317,5748.815058</TimeChanged>
+<TimeCreated>64316,47709.206434</TimeCreated>
+
+<Parameter name="maxParameters">
+<Description>
+constant max parameters</Description>
+</Parameter>
+
+<Method name="RunCommand">
+<Description>
+By calling this method the main routine of command for specific function should run</Description>
+<Abstract>1</Abstract>
+<ClassMethod>1</ClassMethod>
+<FormalSpec>cmdPipeline:%List</FormalSpec>
+<ReturnType>%String</ReturnType>
+</Method>
+
+<Method name="GetHelp">
+<Description>
+After call this method should return string that contains help for specific function </Description>
+<Abstract>1</Abstract>
+<ClassMethod>1</ClassMethod>
+<ReturnType>%String</ReturnType>
+</Method>
+
+<Method name="Compile">
+<Description>
+Special ClassMethod for making demand on implementation of prescribed methods and
+parameters of this class. If some class extends $THIS class and will not implement
+some of methods or parameters of this class then after compilation will programmer
+recieve error about need of implementation of not implemented methods or parameters</Description>
+<ClassMethod>1</ClassMethod>
+<CodeMode>objectgenerator</CodeMode>
+<GenerateAfter>RunCommand</GenerateAfter>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+	set foundMethods = 0
+	set foundParameters = 0
+	for i=1:1:%class.Methods.Count() {
+		set method = %class.Methods.GetAt(i)
+		if ((method.Name = "RunCommand")||(method.Name = "GetHelp")) {
+			set foundMethods = $increment(foundMethods)	
+		}
+	}
+	for i=1:1:%class.Parameters.Count() {
+		set parameter = %class.Parameters.GetAt(i)
+		if ((parameter.Name = "maxParameters")) {
+			set foundParameters = $increment(foundParameters)	
+		}
+	}
+	if foundMethods'=2 return $$$ERROR($$$GeneralError, "You need to implement all compulsory methods!")
+	if foundParameters'=1 return $$$ERROR($$$GeneralError, "You need to implement all compulsory parameters!")
+	
+	return 1
+]]></Implementation>
+</Method>
+</Class>
+
+
+<Class name="REDIS.FunctionsHandling.FunctionsHandler">
+<Super>%Persistent</Super>
+<TimeChanged>64317,6158.535412</TimeChanged>
+<TimeCreated>64316,47761.808672</TimeCreated>
+
+<Method name="SolveExpression">
+<Description>
+Method for calling command that is part of cmdPipeline list, where first is needed
+ to resolve if expression is correct as far as command with parameters count</Description>
+<FormalSpec>cmdPipeline:%List</FormalSpec>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	set result = ""
+	set classFunction = "REDIS.FunctionsScope."_$LIST(cmdPipeline,1)
+	
+	
+	/// GET ALL COMPILED CLASSES FROM PACKAGE: FunctionsScope 	
+	&sql(select LIST(id) into :classesList from %Dictionary.CompiledClass where
+	id LIKE 'REDIS.FunctionsScope.%' AND id = :classFunction)
+	
+	set classesList = $LISTFROMSTRING(classesList)
+	
+	if ($LISTLENGTH(classesList) '= 0){
+		set maxParameters = $PARAMETER(classFunction,"maxParameters")
+		///test number of parameters
+		if (($LISTLENGTH(cmdPipeline)-1) > maxParameters){
+		
+			set result = ##class(REDIS.Terminal.ErrorHandler).ParamExceeded(cmdPipeline, maxParameters)
+		
+		}else{
+			/// function exist and call it
+			set result = $CLASSMETHOD(classFunction,"RunCommand",cmdPipeline)
+		}
+	}
+	else{
+		// function undefined
+		set result = ##class(REDIS.Terminal.ErrorHandler).UndefinedFunction(cmdPipeline, 1)
+	}
+              
+	return result
+]]></Implementation>
+</Method>
+
+<Method name="WatchExpiration">
+<Description>
+Class Method for one job to watch on data expiration</Description>
+<ClassMethod>1</ClassMethod>
+<Implementation><![CDATA[
+	while($Data(^redisWork)){
+		HANG 1
+		if ($DATA(^data)){
+			// TODO - start cycle until there is variable that should not still expire
+			// TODO 
+		}
+		// TODO 
+	}
+]]></Implementation>
+</Method>
+
+<Storage name="Default">
+<Type>%Library.CacheStorage</Type>
+<DataLocation>^REDIS.Func2A71.FunctionsHaAC41D</DataLocation>
+<DefaultData>FunctionsHandlerDefaultData</DefaultData>
+<IdLocation>^REDIS.Func2A71.FunctionsHaAC41D</IdLocation>
+<IndexLocation>^REDIS.Func2A71.FunctionsHaAC41I</IndexLocation>
+<StreamLocation>^REDIS.Func2A71.FunctionsHaAC41S</StreamLocation>
+<Data name="FunctionsHandlerDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+</Data>
+</Storage>
+</Class>
+
+
+<Class name="REDIS.FunctionsScope.DECR">
+<Abstract>1</Abstract>
+<Super>REDIS.FunctionsHandling.FunctionPrescribtion</Super>
+<TimeChanged>64317,8369.118569</TimeChanged>
+<TimeCreated>64316,47819.608656</TimeCreated>
+
+<Parameter name="maxParameters">
+<Default>1</Default>
+</Parameter>
+
+<Method name="RunCommand">
+<Description>
+Function provides decremetation for specific variable, if not exist, is created
+and setted to zero -1 == -1</Description>
+<ClassMethod>1</ClassMethod>
+<FormalSpec>cmdPipeline:%List</FormalSpec>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	set status =""
+	if ($DATA(@("^"_$LIST(cmdPipeline,2)))){
+		set @("^"_$LIST(cmdPipeline,2)) = $increment(@("^"_$LIST(cmdPipeline,2)),-1)
+		set status ="(integer) "_@("^"_$LIST(cmdPipeline,2))
+	}else{
+		set list = $LB("SET",$LIST(cmdPipeline,2),"-1")
+		// needed to set variable if not exist
+		set status = ##class(REDIS.FunctionsScope.SET).RunCommand(list)
+	}
+	return status
+]]></Implementation>
+</Method>
+
+<Method name="GetHelp">
+<ClassMethod>1</ClassMethod>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	return $char(10,13)_$Char(27)_"[33m"_"  DECR key"_$char(10,13)_$char(10,13)_$Char(27)_"[0m"_
+	$Char(27)_"[35m"_"  TIME COMPLEXITY:"_$Char(27)_"[0m"_" O(1)"_$char(10,13)_$char(10,13)_
+	$Char(27)_"[35m"_"  DESCRIPTION:"_$Char(27)_"[0m"_"  Increment or decrement the number stored at key by one. If the key does not exist or contains a value of "_$char(10,13)_
+	$char(9)_$char(9)_"a wrong type, set the key to the value of ""0"" before to perform the increment or decrement operation. "_$char(10,13)_
+	$char(9)_$char(9)_"INCRBY and DECRBY work just like INCR and DECR but instead to increment/decrement by 1 the increment/decrement is integer."_$char(10,13)_
+    $char(9)_$char(9)_"INCR commands are limited to 64 bit signed integers."_$char(10,13)_$char(10,13)_
+    $Char(27)_"[35m"_"  RETURN VALUE:"_$Char(27)_"[0m"_" Integer reply, this commands will reply with the new value of key after the increment or decrement."_$char(10,13)
+]]></Implementation>
+</Method>
+</Class>
+
+
+<Class name="REDIS.FunctionsScope.DEL">
+<Super>REDIS.FunctionsHandling.FunctionPrescribtion</Super>
+<TimeChanged>64317,10606.662843</TimeChanged>
+<TimeCreated>64316,47853.117093</TimeCreated>
+
+<Parameter name="maxParameters">
+<Description>
+constant max parameters - infinity parameters</Description>
+<Default>99999999</Default>
+</Parameter>
+
+<Method name="RunCommand">
+<Description>
+Delete specific amount of variables</Description>
+<ClassMethod>1</ClassMethod>
+<FormalSpec>cmdPipeline:%List</FormalSpec>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	set numDeleted = 0
+	for i=2:1:($LL(cmdPipeline))
+	{
+		if ($DATA(@("^"_$LIST(cmdPipeline,i)))){
+			kill @("^"_$LIST(cmdPipeline,i))
+			set numDeleted = $increment(numDeleted)
+		}
+	}
+	
+	return numDeleted
+]]></Implementation>
+</Method>
+
+<Method name="GetHelp">
+<ClassMethod>1</ClassMethod>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	return $char(10,13)_$Char(27)_"[33m"_" DEL key1 key2 ... keyN"_$char(10,13)_$char(10,13)_$Char(27)_"[0m"_
+	$Char(27)_"[35m"_"  TIME COMPLEXITY:"_$Char(27)_"[0m"_" O(1)"_$char(10,13)_$char(10,13)_
+	$Char(27)_"[35m"_"  DESCRIPTION:"_$Char(27)_"[0m"_"  Remove the specified keys. If a given key does not exist no operation is performed for this key. "_$char(10,13)_
+	$char(9)_$char(9)_" The commnad returns the number of keys removed."_$char(10,13)_$char(10,13)_
+	
+    $Char(27)_"[35m"_"  RETURN VALUE:"_$Char(27)_"[0m"_$char(10,13)_
+    $Char(27)_"!<HTML><ul><ul><ul><ul><li>An integer greater than 0 if one or more keys were removed.</li>"_
+	"<li>0 if none of the specified key existed.</li></ul></ul></ul></ul></HTML>"_$char(10,13)
+]]></Implementation>
+</Method>
+</Class>
+
+
+<Class name="REDIS.FunctionsScope.GET">
+<Abstract>1</Abstract>
+<Super>REDIS.FunctionsHandling.FunctionPrescribtion</Super>
+<TimeChanged>64317,7955.081846</TimeChanged>
+<TimeCreated>64316,47881.868676</TimeCreated>
+
+<Parameter name="maxParameters">
+<Default>1</Default>
+</Parameter>
+
+<Method name="RunCommand">
+<Description>
+Method for returning value setted under specific key</Description>
+<ClassMethod>1</ClassMethod>
+<FormalSpec>cmdPipeline:%List</FormalSpec>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	set status =""
+	
+	if ($DATA(@("^"_$LIST(cmdPipeline,2)))){
+		set status =  @("^"_$LIST(cmdPipeline,2))
+	}else{
+		set status = "(nil)"
+	}
+	return status
+]]></Implementation>
+</Method>
+
+<Method name="GetHelp">
+<ClassMethod>1</ClassMethod>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	return $char(10,13)_$Char(27)_"[33m"_"  DECR key"_$char(10,13)_$char(10,13)_$Char(27)_"[0m"_
+	$Char(27)_"[35m"_"  TIME COMPLEXITY:"_$Char(27)_"[0m"_" O(1)"_$char(10,13)_$char(10,13)_
+	$Char(27)_"[35m"_"  DESCRIPTION:"_$Char(27)_"[0m"_"  Get the value of the specified key. If the key does not exist the special"_$char(10,13)_
+	" 		value 'nil' is returned. If the value stored at key is not a string an "_$char(10,13)_
+	"		error is returned because GET can only handle string values. "_$char(10,13)_$char(10,13)_
+    $Char(27)_"[35m"_"  RETURN VALUE:"_$Char(27)_"[0m"_" Bulk reply"_$char(10,13)
+]]></Implementation>
+</Method>
+</Class>
+
+
+<Class name="REDIS.FunctionsScope.HELP">
+<Super>REDIS.FunctionsHandling.FunctionPrescribtion</Super>
+<TimeChanged>64317,9519.587687</TimeChanged>
+<TimeCreated>64316,47907.087376</TimeCreated>
+
+<Parameter name="maxParameters">
+<Description>
+constant max parameters</Description>
+<Default>1</Default>
+</Parameter>
+
+<Method name="RunCommand">
+<ClassMethod>1</ClassMethod>
+<FormalSpec>cmdPipeline:%List</FormalSpec>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	
+	set result = ""
+
+	/// user typed only "HELP"
+	if ($LISTLENGTH(cmdPipeline) = 1){
+		set result = ..GetHelp()		
+	}
+	/// user typed "HELP" with one parameter
+	else{
+		set className = "REDIS.FunctionsScope."_$LIST(cmdPipeline,2)
+				
+				
+		/// GET ALL COMPILED CLASSES FROM PACKAGE: FunctionsScope 	
+		&sql(select LIST(id) into :classesList from %Dictionary.CompiledClass where
+		id LIKE 'REDIS.FunctionsScope.%' AND id NOT LIKE 'REDIS.FunctionsScope.HELP' AND id = :className)
+		
+				
+		set classesList = $LISTFROMSTRING(classesList)
+						
+		if ($LISTLENGTH(classesList) '= 0){
+			/// call a help for concrete existing function
+			set result = $CLASSMETHOD(className, "GetHelp")	
+		}else{
+			/// function undefined function
+			set result = ##class(REDIS.Terminal.ErrorHandler).UndefinedFunction(cmdPipeline,2)
+		}
+	}
+	
+	return result
+]]></Implementation>
+</Method>
+
+<Method name="GetHelp">
+<ClassMethod>1</ClassMethod>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	set helpUsage = $CHAR(10,13)_$Char(27)_"[33m"_"  Welcome to HELP for CACHÉ-REDIS"_$Char(27)_"[0m"_$CHAR(10,13)_
+					"  If you need help for any function, type "_$char(27)_
+					"[4m""do 'var'.Run(""HELP command"")"""_$char(27)_"[0m"_$CHAR(10,13)_"  By typing "_$char(27)_
+					"[4m""do 'var'.Run(""COMMAND param1 param2 ..."")"""_$char(27)_"[0m"_" you can run any"
+					_" command / function"_$CHAR(10,13)_$CHAR(10,13)_
+					"  These functions are available:"_$CHAR(10,13)_$CHAR(10,13)_"    "_$char(27)_"[36m"
+					
+					
+	/// GET ALL COMPILED CLASSES FROM PACKAGE: FunctionsScope	
+	&sql(select LIST(id) into :classesList from %Dictionary.CompiledClass where
+	id LIKE 'REDIS.FunctionsScope.%' ORDER BY id ASC)
+			
+	set classesList = $LISTFROMSTRING(classesList)
+
+	try{
+		for i=1:1:$LISTLENGTH(classesList){
+			set helpUsage = helpUsage_$PIECE($LIST(classesList,i),".",3)_" , "
+		}
+	} catch e{
+		w $System.Status.GetErrorText(e)
+	}
+	
+	set helpUsage = helpUsage_$char(27)_"[0m"_$CHAR(10,13)
+					
+	return helpUsage
+]]></Implementation>
+</Method>
+</Class>
+
+
+<Class name="REDIS.FunctionsScope.INCR">
+<Abstract>1</Abstract>
+<Super>REDIS.FunctionsHandling.FunctionPrescribtion</Super>
+<TimeChanged>64317,8661.217901</TimeChanged>
+<TimeCreated>64317,7608.452024</TimeCreated>
+
+<Parameter name="maxParameters">
+<Default>1</Default>
+</Parameter>
+
+<Method name="RunCommand">
+<Description>
+Function provides incremetation for specific variable, if not exist, is created
+and setted to zero +1 == +1</Description>
+<ClassMethod>1</ClassMethod>
+<FormalSpec>cmdPipeline:%List</FormalSpec>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	set status =""
+	if ($DATA(@("^"_$LIST(cmdPipeline,2)))){
+		set @("^"_$LIST(cmdPipeline,2)) = $increment(@("^"_$LIST(cmdPipeline,2)))
+		set status ="(integer) "_@("^"_$LIST(cmdPipeline,2))
+	}else{
+		set list = $LB("SET",$LIST(cmdPipeline,2),"1")
+		// needed to set variable if not exist
+		set status = ##class(REDIS.FunctionsScope.SET).RunCommand(list)
+	}
+	return status
+]]></Implementation>
+</Method>
+
+<Method name="GetHelp">
+<ClassMethod>1</ClassMethod>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	return $char(10,13)_$Char(27)_"[33m"_"  INCR key"_$char(10,13)_$char(10,13)_$Char(27)_"[0m"_
+	$Char(27)_"[35m"_"  TIME COMPLEXITY:"_$Char(27)_"[0m"_" O(1)"_$char(10,13)_$char(10,13)_
+	$Char(27)_"[35m"_"  DESCRIPTION:"_$Char(27)_"[0m"_"  Increment or decrement the number stored at key by one. If the key does not exist or contains a value of "_$char(10,13)_
+	$char(9)_$char(9)_"a wrong type, set the key to the value of ""0"" before to perform the increment or decrement operation. "_$char(10,13)_
+	$char(9)_$char(9)_"INCRBY and DECRBY work just like INCR and DECR but instead to increment/decrement by 1 the increment/decrement is integer."_$char(10,13)_
+    $char(9)_$char(9)_"INCR commands are limited to 64 bit signed integers."_$char(10,13)_$char(10,13)_
+    $Char(27)_"[35m"_"  RETURN VALUE:"_$Char(27)_"[0m"_" Integer reply, this commands will reply with the new value of key after the increment or decrement."_$char(10,13)
+]]></Implementation>
+</Method>
+</Class>
+
+
+<Class name="REDIS.FunctionsScope.SET">
+<Abstract>1</Abstract>
+<Super>REDIS.FunctionsHandling.FunctionPrescribtion</Super>
+<TimeChanged>64317,47407.056344</TimeChanged>
+<TimeCreated>64316,47935.130996</TimeCreated>
+
+<Parameter name="maxParameters">
+<Description>
+constant max parameters</Description>
+<Default>4</Default>
+</Parameter>
+
+<Method name="RunCommand">
+<ClassMethod>1</ClassMethod>
+<FormalSpec>cmdPipeline:%List</FormalSpec>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	set result = ""
+	
+	// test number of parameters between 2 or 4
+	set paramNum = ($LISTLENGTH(cmdPipeline)-1)
+	
+	
+	/// means that classic function manner "SET VARIABLE" is used
+	if (paramNum = 2){
+		set result = ..SetVariable(cmdPipeline)
+	}
+	elseif (paramNum = 3){
+		
+		set option = $ZCONVERT($LIST(cmdPipeline,4),"U")		
+		/// if variable not exist, set it
+		if (option = "NX"){
+			if ('$DATA(@("^"_$LIST(cmdPipeline,2)))){
+				set result = ..SetVariable(cmdPipeline)
+			}else{
+				set result = "(nil)"
+			}
+		}
+		/// if variable exist, implement it
+		elseif(option = "XX"){
+			if ($DATA(@("^"_$LIST(cmdPipeline,2)))){
+				set result = ..SetVariable(cmdPipeline)
+			}else{
+				set result = "(nil)"
+			}
+		}
+		else{
+			set result = ##class(REDIS.Terminal.ErrorHandler).SyntaxError(" Option """_option_""" not exist, see ""help set""")
+		}
+	}
+	elseif (paramNum = 4){
+		set option = $ZCONVERT($LIST(cmdPipeline,4),"U")
+		if (option = "EX"){
+			// toDo test if number
+			if ($NUMBER($LIST(cmdPipeline,5)) '= ""){
+				JOB ##class(REDIS.FunctionsScope.SET).SetTimedVariable(cmdPipeline,$LIST(cmdPipeline,5))
+				set result = "OK"
+			}
+			else
+			{
+				set result = ##class(REDIS.Terminal.ErrorHandler).NotNumber(cmdPipeline)
+			}			
+		}
+		elseif(option = "PX"){
+			
+			if ($NUMBER($LIST(cmdPipeline,5)) '= ""){
+				// conversion to miliseconds:
+				set $LIST(cmdPipeline,5) = $LIST(cmdPipeline,5)/1000
+				JOB ##class(REDIS.FunctionsScope.SET).SetTimedVariable(cmdPipeline,$LIST(cmdPipeline,5))
+				set result = "OK"
+			}
+			else
+			{
+				set result = ##class(REDIS.Terminal.ErrorHandler).NotNumber(cmdPipeline)
+			}
+			
+		}
+		else{
+			set result = ##class(REDIS.Terminal.ErrorHandler).SyntaxError(" Option """_option_""" not exist, see ""help set""")
+		}
+	}
+	
+	return result
+]]></Implementation>
+</Method>
+
+<Method name="GetHelp">
+<ClassMethod>1</ClassMethod>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	return $char(10,13)_$Char(27)_"[33m"_"  SET key value"_$char(10,13)_$char(10,13)_$Char(27)_"[0m"_
+	$Char(27)_"[35m"_"  TIME COMPLEXITY:"_$Char(27)_"[0m"_" O(1)"_$char(10,13)_$char(10,13)_
+	$Char(27)_"[35m"_"  DESCRIPTION:"_$Char(27)_"[0m"_"  Set key to hold the string value. If key already "_$char(10,13)_
+	$char(9)_$char(9)_"holds a value, it is overwritten, regardless of its type. Any previous time to live "_$char(10,13)_
+	$char(9)_$char(9)_"associated with the key is discarded on successful SET operation. "_$char(10,13)_
+	$char(27)_"[35m"_"  OPTIONS:"_$char(27)_"[0m"_$char(10,13)_
+	$Char(27)_"!<HTML><ul><ul><ul><ul><li>EX seconds -- Set the specified expire time, in seconds.</li>"_
+	"<li>PX milliseconds -- Set the specified expire time, in milliseconds.</li><li>NX -- Only set the key if it does not already exist.</li>"_
+	"<li>XX -- Only set the key if it already exist.</li></ul></ul></ul></ul></HTML>"_$char(10,13)_
+    $Char(27)_"[35m"_"  RETURN VALUE:"_$Char(27)_"[0m"_" Status code reply: OK if SET was executed correctly. Null multi-bulk reply: a Null Bulk Reply"_$char(10,13)_
+    $char(9)_$char(9)_"is returned if the SET operation was not performed becase the user specified the NX or XX "_$char(10,13)_
+    $char(9)_$char(9)_"option but the condition was not met."_$char(10,13)
+]]></Implementation>
+</Method>
+
+<Method name="SetTimedVariable">
+<Description>
+Sets the key-value pair variable with timing</Description>
+<ClassMethod>1</ClassMethod>
+<FormalSpec>cmdPipeline:%List,numSeconds:%String</FormalSpec>
+<Implementation><![CDATA[
+	
+	 /*// better implementation of timing with variables:
+	
+	set actualTime = $now()
+	set timeExpire = "notDefined"
+	set days = $PIECE((($piece(actualTime,",",*)+numSeconds)/86399),".")
+	
+	if (days = "")
+	{
+		// the variable will expire today, no day ++ is needed
+		set timeExpire = ($piece(actualTime,","))_","_($piece(actualTime,",",*) + numSeconds)
+		
+	}else{
+		// the variable will expire another day, it is needed
+		// to write "days"++ to actualTime to compute expiration time
+		// , other seconds left must be added to seconds of actualTime
+		set overlappingSeconds = ($piece(actualTime,",",*)+numSeconds
+		set timeExpire = ($piece(actualTime,","))+days)_","_(overlappingSeconds - ((overlappingSeconds\86399)*86399))
+	}
+	// expiration time is prepared and can be saved into globals
+	// , dont forget to set global ^expires for garbadge collctor job
+	set ^expires(timeExpire) = ("^"_$LIST(cmdPipeline,2))
+	set ^data(("^"_$LIST(cmdPipeline,2))) = $LB(timeExpire,$LIST(cmdPipeline,3))
+	
+	*/
+	
+	
+	
+	// set value to global / create global as key/value pair
+	set @("^"_$LIST(cmdPipeline,2)) = $LIST(cmdPipeline,3)
+	
+	HANG numSeconds
+	
+	kill @("^"_$LIST(cmdPipeline,2))
+]]></Implementation>
+</Method>
+
+<Method name="SetVariable">
+<Description>
+Sets the key-value pair variable without timing</Description>
+<ClassMethod>1</ClassMethod>
+<FormalSpec>cmdPipeline:%List</FormalSpec>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	set globalName = $LIST(cmdPipeline,2)
+	set valueToSet = $LIST(cmdPipeline,3)
+	set result = $XECUTE("(value) SET ^"_globalName_"=value QUIT ""OK""",valueToSet)	
+	return result
+]]></Implementation>
+</Method>
+</Class>
+
+
+<Class name="REDIS.RestAPI.Communication">
+<Super>%CSP.REST</Super>
+<TimeChanged>64317,40773.06162</TimeChanged>
+<TimeCreated>64316,48851.547045</TimeCreated>
+
+<XData name="UrlMap">
+<Data><![CDATA[
+<Routes>
+   <Route Url="/set" Method="PUT" Call="Set"/>
+   <Route Url="/get" Method="PUT" Call="Get"/>
+   <Route Url="/del" Method="PUT" Call="Del"/>
+   <Route Url="/incr" Method="PUT" Call="Incr"/>
+   <Route Url="/decr" Method="PUT" Call="Decr"/>
+   <Route Url="/help" Method="PUT" Call="Help"/>
+   
+     <Route Url="/setTimed" Method="PUT" Call="SetTimed"/>
+   
+   <!-- Your goal is to implement /message URL route, and just like with /ping
+   	you need to output the data in JSON format. My program will expect "message" 
+   	property in JSON object you output. -->
+</Routes>
+]]></Data>
+</XData>
+
+<Method name="Set">
+<Description>
+call set function with key and value pair parameters</Description>
+<ClassMethod>1</ClassMethod>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+	set setObject = {}.%FromJSON(%request.Content)
+	set key = setObject.key
+	set value = setObject.value
+	
+	set redis = ##class(REDIS.Terminal.InputHandler).%New(0)
+	set result = redis.Run("SET "_key_" "_value)
+	
+	set obj = {
+		"Communication OK ": (result)
+    }
+    write obj.%ToJSON()
+
+	return $$$OK
+]]></Implementation>
+</Method>
+
+<Method name="Get">
+<ClassMethod>1</ClassMethod>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+	set setObject = {}.%FromJSON(%request.Content)
+	set key = setObject.key
+	
+	set redis = ##class(REDIS.Terminal.InputHandler).%New(0)
+	set result = redis.Run("GET "_key)
+	
+	set obj = {
+		"Communication OK ": (result)
+    }
+    write obj.%ToJSON()
+
+	return $$$OK
+]]></Implementation>
+</Method>
+
+<Method name="Del">
+<ClassMethod>1</ClassMethod>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+	set setObject = {}.%FromJSON(%request.Content)
+	set key = setObject.key
+	
+	set redis = ##class(REDIS.Terminal.InputHandler).%New(0)
+	set result = redis.Run("DEL "_key)
+	
+	set obj = {
+		"Communication OK ": (result)
+    }
+    write obj.%ToJSON()
+
+	return $$$OK
+]]></Implementation>
+</Method>
+
+<Method name="Incr">
+<ClassMethod>1</ClassMethod>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+	set setObject = {}.%FromJSON(%request.Content)
+	set key = setObject.key
+	
+	set redis = ##class(REDIS.Terminal.InputHandler).%New(0)
+	set result = redis.Run("INCR "_key)
+	
+	set obj = {
+		"Communication OK ": (result)
+    }
+    write obj.%ToJSON()
+
+	return $$$OK
+]]></Implementation>
+</Method>
+
+<Method name="Decr">
+<ClassMethod>1</ClassMethod>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+	set setObject = {}.%FromJSON(%request.Content)
+	set key = setObject.key
+	
+	set redis = ##class(REDIS.Terminal.InputHandler).%New(0)
+	set result = redis.Run("DECR "_key)
+	
+	set obj = {
+		"Communication OK ": (result)
+    }
+    write obj.%ToJSON()
+
+	return $$$OK
+]]></Implementation>
+</Method>
+
+<Method name="Help">
+<ClassMethod>1</ClassMethod>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+	set setObject = {}.%FromJSON(%request.Content)
+	set key = setObject.key
+	
+	set redis = ##class(REDIS.Terminal.InputHandler).%New(0)
+	set result = redis.Run("HELP "_key)
+	
+	set obj = {
+		"Communication OK ": (result)
+    }
+    write obj.%ToJSON()
+
+	return $$$OK
+]]></Implementation>
+</Method>
+
+<Method name="SetTimed">
+<ClassMethod>1</ClassMethod>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+	set setObject = {}.%FromJSON(%request.Content)
+	set key = setObject.key
+	set value = setObject.value
+	set option = setObject.option
+	set time = setObject.time
+	
+	set redis = ##class(REDIS.Terminal.InputHandler).%New(0)
+	set result = redis.Run("SET "_key_" "_value_" "_option_" "_time)
+	
+	set obj = {
+		"Communication OK ": (result)
+    }
+    write obj.%ToJSON()
+
+	return $$$OK
+]]></Implementation>
+</Method>
+
+<Method name="OnPreDispatch">
+<Description>
+Apply some settings for all requests</Description>
+<ClassMethod>1</ClassMethod>
+<FormalSpec><![CDATA[pUrl:%String,pMethod:%String,&pContinue:%Boolean]]></FormalSpec>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+	set %response.CharSet = "utf-8"
+	set %response.ContentType = "application/json"
+	do %response.SetHeader("Access-Control-Allow-Origin", "*")
+	return $$$OK
+]]></Implementation>
+</Method>
+</Class>
+
+
+<Class name="REDIS.Terminal.ErrorHandler">
+<Description>
+Class for handling all errors that can uprise during using REDIS-CACHE</Description>
+<Abstract>1</Abstract>
+<TimeChanged>64317,6420.082315</TimeChanged>
+<TimeCreated>64316,47550.278311</TimeCreated>
+
+<Method name="ParamExceeded">
+<Description>
+If max parameters were exceeded while calling function</Description>
+<ClassMethod>1</ClassMethod>
+<FormalSpec>cmdPipeline:%List,maxParameters:%Integer</FormalSpec>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	set result = $Char(27)_"[31m"_" <Error>: Cannot run command """_$LIST(cmdPipeline,1)_""""_
+		" You exceeded maximum of parameters(max "_maxParameters_"), you entered: "_($LISTLENGTH(cmdPipeline)-1)_$Char(27)_"[0m"
+		
+	return result
+]]></Implementation>
+</Method>
+
+<Method name="SyntaxError">
+<Description>
+If any syntax error occurs at anytime</Description>
+<ClassMethod>1</ClassMethod>
+<FormalSpec>errMessage:%String</FormalSpec>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	set result = $Char(27)_"[31m"_" <Syntax Error>: "_errMessage_$Char(27)_"[0m"
+		
+	return result
+]]></Implementation>
+</Method>
+
+<Method name="UndefinedFunction">
+<Description>
+If some funcitons is not implemented or not supported (for example help for "help")</Description>
+<ClassMethod>1</ClassMethod>
+<FormalSpec>cmdPipeline:%List,paramIndex:%Integer</FormalSpec>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	set result = $Char(27)_"[31m"_" <Error>: Cannot run command """_$LIST(cmdPipeline,1)_""""_
+	", function """_$LIST(cmdPipeline,paramIndex)_""" is undefined"_$Char(27)_"[0m"
+	
+	return result
+]]></Implementation>
+</Method>
+
+<Method name="NotNumber">
+<Description>
+If given value from user/programmer is not clear number</Description>
+<ClassMethod>1</ClassMethod>
+<FormalSpec>cmdPipeline:%List</FormalSpec>
+<ReturnType>%String</ReturnType>
+<Implementation><![CDATA[
+	set result = $Char(27)_"[31m"_" <Num-Error>: Setted value """_$LIST(cmdPipeline,5)_""" is "_
+	"not an integer or out of range"_$Char(27)_"[0m"
+	
+	return result
+]]></Implementation>
+</Method>
+</Class>
+
+
+<Class name="REDIS.Terminal.InputHandler">
+<Super>%Persistent</Super>
+<TimeChanged>64317,40434.494715</TimeChanged>
+<TimeCreated>64316,47589.735808</TimeCreated>
+
+<Property name="FunctionsHandler">
+<Type>REDIS.FunctionsHandling.FunctionsHandler</Type>
+</Property>
+
+<Property name="StringParser">
+<Type>REDIS.Terminal.StringParser</Type>
+</Property>
+
+<Property name="decodedPipeline">
+<Type>%List</Type>
+</Property>
+
+<Method name="Run">
+<FormalSpec>cmdPipeline:%String</FormalSpec>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+
+	/// decode cmdPipeline to make clear command and parameters	
+	set decodedPipeline = ..StringParser.decodeCommand(cmdPipeline)
+	
+	write ..FunctionsHandler.SolveExpression(decodedPipeline)
+
+	return $$$OK
+]]></Implementation>
+</Method>
+
+<Method name="End">
+<Description>
+ TODO - method for realease unimportant resources</Description>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+	// end redis work
+	kill ^redisWork
+	
+	// dispose of this object TODO:
+	
+	return $$$OK
+]]></Implementation>
+</Method>
+
+<Method name="%OnNew">
+<Description><![CDATA[
+This callback method is invoked by the <METHOD>%New</METHOD> method to 
+provide notification that a new instance of an object is being created.
+
+<P>If this method returns an error then the object will not be created.
+<p>It is passed the arguments provided in the %New call.
+When customizing this method, override the arguments with whatever variables and types you expect to receive from %New().
+For example, if you're going to call %New, passing 2 arguments, %OnNew's signature could be:
+<p>Method %OnNew(dob as %Date = "", name as %Name = "") as %Status
+If instead of returning a %Status code this returns an oref and this oref is a subclass of the current
+class then this oref will be the one returned to the caller of %New method.]]></Description>
+<FormalSpec>webCall:%Integer</FormalSpec>
+<Private>1</Private>
+<ReturnType>%Status</ReturnType>
+<ServerOnly>1</ServerOnly>
+<Implementation><![CDATA[
+	set ..FunctionsHandler = ##class(REDIS.FunctionsHandling.FunctionsHandler).%New()
+	set ..StringParser = ##class(REDIS.Terminal.StringParser).%New()
+	
+	/* TODO - for better expiration variables handling
+	/// creation of important globals
+	//set ^redisWork = 1
+	
+	/// creation of JOB control routines
+	//JOB ##class(REDIS.FunctionsHandling.FunctionsHandler).WatchExpiration()
+	*/
+	if (webCall '= 0){
+		write $Char(27), "!<HTML><style>.thumb1 { background: url(https://davidmles.com/blog/what-is-redis-introduction-ruby/redis.png)"_
+		" 50% 50% no-repeat;width: 300px;height: 90px;</style><div class=""thumb1""></div></HTML>"
+	
+		write !,$Char(27)_"[33m"_"  Caché-Redis Version 1.0"_$Char(27)_"[0m",!,
+		"  Author: Marek Bernád",!,!,"  Welcome to Redis No-SQL database",!
+		,"  type "_$char(27)_"[4m"_"""do 'variable'.Run(""HELP"")"""_$char(27)_"[0m"_" for show functions",!
+	}
+		
+	Quit $$$OK
+]]></Implementation>
+</Method>
+
+<Storage name="Default">
+<Type>%Library.CacheStorage</Type>
+<DataLocation>^REDIS.Terminal.InputHandlerD</DataLocation>
+<DefaultData>InputHandlerDefaultData</DefaultData>
+<IdLocation>^REDIS.Terminal.InputHandlerD</IdLocation>
+<IndexLocation>^REDIS.Terminal.InputHandlerI</IndexLocation>
+<StreamLocation>^REDIS.Terminal.InputHandlerS</StreamLocation>
+<Data name="InputHandlerDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>FunctionsHandler</Value>
+</Value>
+<Value name="3">
+<Value>StringParser</Value>
+</Value>
+<Value name="4">
+<Value>decodedPipeline</Value>
+</Value>
+</Data>
+</Storage>
+</Class>
+
+
+<Class name="REDIS.Terminal.StringParser">
+<Super>%Persistent</Super>
+<TimeChanged>64317,6722.567103</TimeChanged>
+<TimeCreated>64316,47642.877398</TimeCreated>
+
+<Method name="decodeCommand">
+<Description>
+Method used for creating List from given data as String, where every not important
+white characters are removed from future list and only clear list with commnad and
+parameters will remain. The data contains common data input inputed from user for
+work with REDIS-CACHÉ interface.</Description>
+<FormalSpec>data:%String</FormalSpec>
+<ReturnType>%List</ReturnType>
+<Implementation><![CDATA[
+	set List = $ListFromString(data," ")
+	
+	/// just preparing our new list with elements without spaces
+	set newList = $ListBuild()
+	
+	set index = 1
+	set newListIndex = 1
+	
+	/// copy only input with data to new list and upper case only funcitons
+	while ((index-1) '= $LISTLENGTH(List)){
+		if ($LIST(List,index) '= ""){
+			if (newListIndex = 1){
+				set $LIST(newList,newListIndex) = $ZCONVERT($LIST(List,index),"U")
+			}
+			elseif ((newListIndex = 2) && ($LIST(newList,1) = "HELP")){
+				set $LIST(newList,newListIndex) = $ZCONVERT($LIST(List,index),"U")
+			}else{
+				set $LIST(newList,newListIndex) = $LIST(List,index)
+			}
+			set newListIndex = $increment(newListIndex)
+		}
+		set index = $increment(index)
+	}
+	
+	return newList
+]]></Implementation>
+</Method>
+
+<Storage name="Default">
+<Type>%Library.CacheStorage</Type>
+<DataLocation>^REDIS.Terminal.StringParserD</DataLocation>
+<DefaultData>StringParserDefaultData</DefaultData>
+<IdLocation>^REDIS.Terminal.StringParserD</IdLocation>
+<IndexLocation>^REDIS.Terminal.StringParserI</IndexLocation>
+<StreamLocation>^REDIS.Terminal.StringParserS</StreamLocation>
+<Data name="StringParserDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+</Data>
+</Storage>
+</Class>
+
+
+</Export>
